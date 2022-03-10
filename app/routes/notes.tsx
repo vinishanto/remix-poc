@@ -1,22 +1,30 @@
 import { Form, json, useLoaderData, Outlet, Link } from "remix";
 import type { LoaderFunction } from "remix";
+import { z } from "zod";
 
 import { requireUserId } from "~/session.server";
 import { useUser } from "~/utils";
-import { getNoteListItems } from "~/models/note.server";
+import { prisma } from "~/db.server";
+import { noteSchema } from "~/models/types";
 
-type LoaderData = {
-  noteListItems: Awaited<ReturnType<typeof getNoteListItems>>;
-};
+const noteListItemSelect = { id: true, title: true } as const;
+const LoaderData = z.object({
+  noteListItems: z.array(noteSchema.pick(noteListItemSelect)),
+});
+type LoaderData = z.infer<typeof LoaderData>;
 
 export const loader: LoaderFunction = async ({ request }) => {
   const userId = await requireUserId(request);
-  const noteListItems = await getNoteListItems(userId);
+  const noteListItems = await prisma.note.findMany({
+    where: { userId: userId },
+    select: noteListItemSelect,
+    orderBy: { updatedAt: "desc" },
+  });
   return json<LoaderData>({ noteListItems });
 };
 
 export default function NotesPage() {
-  const data = useLoaderData<LoaderData>();
+  const data = LoaderData.parse(useLoaderData());
   const user = useUser();
 
   return (
